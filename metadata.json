@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Music Downloader Bot",
+  "description": "Telegram Bot Python dengan pyTelegramBotAPI, ytmusicapi, yt-dlp, dan FFmpeg untuk mengunduh katalog lagu artis berkualitas tinggi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

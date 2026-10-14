@@ -1,0 +1,4 @@
+pyTelegramBotAPI==4.37.0
+yt-dlp==2026.8.19
+ytmusicapi==1.12.3
+python-dotenv==1.2.4
