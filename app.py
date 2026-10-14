@@ -864,16 +864,50 @@ def main() -> None:
     logger.info("Menunggu pesan pengguna...")
     logger.info("=" * 60)
 
-    # Infinity polling dengan penanganan koneksi terputus otomatis
+    # 1. Bersihkan webhook lama jika ada agar tidak bentrok dengan metode polling getUpdates
+    try:
+        logger.info("Memeriksa status webhook dan membersihkan pending updates...")
+        bot.delete_webhook(drop_pending_updates=True)
+        time.sleep(1)
+        logger.info("Status webhook bersih. Memulai polling getUpdates...")
+    except Exception as wh_err:
+        logger.warning("Peringatan saat memeriksa/menghapus webhook: %s", wh_err)
+
+    # 2. Infinity polling dengan penanganan cerdas untuk error 409 Conflict
     while True:
         try:
-            bot.infinity_polling(timeout=20, long_polling_timeout=20)
+            bot.infinity_polling(timeout=20, long_polling_timeout=20, skip_pending=True)
         except (KeyboardInterrupt, SystemExit):
             logger.info("Bot dihentikan oleh pengguna.")
             break
+        except telebot.apihelper.ApiTelegramException as api_err:
+            if getattr(api_err, "error_code", None) == 409 or "Conflict" in str(api_err):
+                logger.error(
+                    "\n" + "!" * 70 + "\n"
+                    "❌ TERJADI BENTROK TOKEN TELEGRAM (Error 409 Conflict: Terminated by other getUpdates)!\n"
+                    "PENYEBAB: Ada instance bot lain yang sedang aktif berjalan menggunakan token yang sama.\n\n"
+                    "SOLUSI MENGATASINYA:\n"
+                    "1. Tutup / Stop proses script bot di terminal lain, tab lain, atau server lain.\n"
+                    "   - Di Linux / Mac: jalankan `pkill -f app.py`\n"
+                    "   - Di Windows: matikan proses Python di Task Manager atau tutup command prompt lain.\n"
+                    "2. Jika token lama Anda pernah dipakai orang lain atau terekspos di publik:\n"
+                    "   - Buka Telegram -> chat dengan @BotFather\n"
+                    "   - Ketik /revoke lalu pilih bot Anda untuk mendapatkan TOKEN BARU.\n"
+                    "   - Masukkan token baru tersebut ke file .env.\n"
+                    "!" * 70 + "\n"
+                )
+                time.sleep(15)  # Beri jeda agar tidak terus-menerus bertabrakan request
+            else:
+                logger.error("Terjadi galat API Telegram: %s. Melakukan rekoneksi dalam 5 detik...", api_err)
+                time.sleep(5)
         except Exception as e:
-            logger.error("Terjadi galat pada polling: %s. Melakukan rekoneksi dalam 5 detik...", e)
-            time.sleep(5)
+            if "Conflict" in str(e):
+                logger.error("Terdeteksi konflik proses bot: %s. Jeda 15 detik sebelum mencoba lagi...", e)
+                time.sleep(15)
+            else:
+                logger.error("Terjadi galat pada polling: %s. Melakukan rekoneksi dalam 5 detik...", e)
+                time.sleep(5)
 
 if __name__ == "__main__":
     main()
+
