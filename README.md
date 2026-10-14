@@ -1,143 +1,119 @@
-# 🎵 Telegram Artist Music Downloader Bot
+# 🎵 Telegram Artist Music Downloader Bot (High-Throughput & Archive Edition)
 
-Bot Telegram berbasis Python yang dirancang untuk mencari, mengumpulkan, dan mengunduh seluruh katalog musik artis dari YouTube Music (mencakup bagian **Songs**, seluruh **Album**, serta seluruh **Singles & EP**) dan mengirimkannya langsung ke chat Telegram dalam format audio MP3 berkualitas tinggi.
+Bot Telegram Python tingkat lanjut yang dirancang untuk menyapu seluruh katalog lagu artis dari YouTube Music (**Songs**, semua **Album**, serta semua **Singles & EP**), mengunduh dengan arsitektur pipeline konkuren berkecepatan tinggi, mengarsipkan file ke channel Telegram arsip, serta menyimpannya dalam database cache persisten SQLite.
 
 ---
 
-## ✨ Fitur Utama
+## ✨ Fitur Unggulan Terbaru
 
-- 🔍 **Penyapuan Katalog Penuh:** Mengumpulkan lagu dari playlist resmi artis, semua album rilis, dan singles/EP tanpa batas arbitrer (bebas dari limit buatan 50 atau 100 lagu).
-- 🧹 **Deduplikasi Cerdas:** Memastikan satu lagu tidak diunduh atau dikirim berulang kali dengan sistem deduplikasi berbasis `videoId`.
-- 🛡️ **Keamanan Terjamin:** Token bot disimpan aman di file `.env` (environment variable `TELEGRAM_BOT_TOKEN`) dan tidak di-hardcode di source code.
-- ⚡ **Antrean Non-Blocking:** Unduhan berjalan di background worker thread terpisah, menjaga bot tetap responsif melayani pengguna lain.
-- 🔄 **Toleransi Kesalahan & Retry:** Mekanisme coba ulang otomatis untuk kegagalan jaringan sementara. Kegagalan satu lagu tidak membatalkan sisa antrean.
-- 🛑 **Pembatalan Kooperatif Riil:** Tombol `❌ Batalkan` langsung menghentikan proses unduhan dan membersihkan file sementara seketika.
-- 📦 **Pembersihan Otomatis:** File audio MP3 sementara diisolasi dalam direktori temp khusus per sesi dan langsung dibersihkan setelah dikirim atau saat terjadi error.
-- 📊 **Progres & Laporan Akhir:** Status progres berkala yang aman dari rate-limit Telegram, serta ringkasan akhir lengkap dengan tombol coba lagi (*Retry*) untuk lagu yang gagal.
+1. ⚡ **Producer-Consumer Pipeline (Download & Upload Paralel):**
+   - Proses download dan upload berjalan konkuren menggunakan worker terpisah (`DOWNLOAD_WORKERS` dan `UPLOAD_WORKERS`).
+   - Tidak perlu menunggu satu lagu selesai diunggah sebelum mulai mengunduh lagu berikutnya.
+   - Menggunakan bounded queue (`MAX_QUEUE_SIZE`) untuk mencegah kehabisan memori atau disk.
+
+2. 🏛️ **Pengarsipan Wajib Channel (`ARCHIVE_CHANNEL_ID`):**
+   - Setiap lagu yang berhasil diproses wajib dikirim ke channel arsip terlebih dahulu.
+   - Bot mengekstrak Telegram `file_id` dari pesan arsip, lalu meneruskannya ke pengguna secara instan tanpa mengunggah ulang file fisik.
+   - Validasi ketat terhadap format channel (mencegah kesalahan placeholder `-00`).
+
+3. 💾 **Cache Persisten SQLite (Pengiriman Ulang Instan):**
+   - Metadata dan `file_id` Telegram dicatat ke dalam database SQLite (`music_cache.db`).
+   - Permintaan lagu yang sudah pernah diarsipkan akan dikirimkan **secara instan (0 detik download/upload)** menggunakan `file_id`.
+
+4. 📋 **Multi-Job Queue (Antrean Multi-Artis Bersamaan):**
+   - Pengguna dapat meminta artis baru (misalnya `Peterpan`) saat proses unduh artis sebelumnya (`Noah`) masih berlangsung.
+   - Job baru langsung masuk ke antrean berikutnya tanpa mereset, menimpa, atau membatalkan proses aktif.
+   - Dilengkapi menu `/queue` atau `📋 Status Antrean` untuk memantau progres antrean.
+
+5. 🎛️ **Konfigurasi Audio Fleksibel via ENV:**
+   - `AUDIO_QUALITY=best`: Memilih stream audio murni terbaik dari YouTube Music (tanpa stream video).
+   - `AUDIO_FORMAT=mp3`: Format audio target.
+   - `AUDIO_BITRATE=0`: Nilai `0` atau `best` menjaga kualitas bitrate sumber asli tanpa re-encode lossy yang sia-sia.
+
+6. 🛡️ **Koneksi Polling & Timeout Tangguh:**
+   - Konfigurasi timeout tingkat library: `BOT_API_TIMEOUT`, `POLLING_TIMEOUT`, dan `LONG_POLLING_TIMEOUT`.
+   - Pembersihan webhook otomatis saat startup untuk mencegah bentrok polling.
+   - Deteksi ramah dan penanganan error `409 Conflict`.
+
+7. 🛑 **Pembatalan Kooperatif & Pembersihan Otomatis:**
+   - Tombol `❌ Batalkan` menghentikan proses unduhan secara aman dan membersihkan file temporary seketika tanpa mengganggu job pengguna lain.
 
 ---
 
 ## 📁 Struktur Berkas
 
 ```text
-├── app.py              # Program utama bot Telegram
-├── test_bot.py         # Test suite otomatis (12 skenario pengujian)
-├── requirements.txt    # Daftar dependensi Python terbaru
-├── .env.example        # Contoh konfigurasi environment variable
-└── README.md           # Dokumentasi lengkap proyek
+├── app.py              # Program utama bot Telegram (High-Throughput Pipeline)
+├── test_bot.py         # Test suite otomatis (10 pengujian runtime wajib)
+├── music_cache.db      # Database SQLite persistent cache (dibuat otomatis)
+├── requirements.txt    # Daftar dependensi Python terbaru (PyPI)
+├── .env.example        # Template konfigurasi environment variable
+└── README.md           # Dokumentasi teknis proyek
 ```
 
 ---
 
-## ⚙️ Prasyarat Sistem
+## ⚙️ Konfigurasi Environment Variable (`.env`)
 
-1. **Python:** Versi `3.10` atau yang lebih baru.
-2. **FFmpeg:** Dibutuhkan oleh `yt-dlp` untuk konversi audio ke format MP3.
-3. **Akun Bot Telegram:** Token bot dari [@BotFather](https://t.me/BotFather).
+Salin `.env.example` ke `.env` lalu sesuaikan nilainya:
 
----
+```env
+# Token Bot Telegram dari @BotFather (WAJIB)
+BOT_TOKEN="your_telegram_bot_token_here"
 
-## 🚀 Panduan Instalasi & Setup
+# ID Channel Arsip Telegram Wajib (Gunakan angka -100xxxxxxxxxx atau @username)
+# JANGAN gunakan "-00" karena itu adalah placeholder contoh.
+ARCHIVE_CHANNEL_ID="-1001234567890"
 
-### 1. Instalasi FFmpeg
+# Kualitas dan Format Audio
+AUDIO_QUALITY="best"
+AUDIO_FORMAT="mp3"
+AUDIO_BITRATE="0"
 
-- **Ubuntu / Debian:**
-  ```bash
-  sudo apt update && sudo apt install -y ffmpeg
-  ```
-- **macOS (via Homebrew):**
-  ```bash
-  brew install ffmpeg
-  ```
-- **Windows (PowerShell):**
-  ```powershell
-  winget install Gyan.FFmpeg
-  ```
-  *Atau unduh manual dari [ffmpeg.org](https://ffmpeg.org) dan masukkan path folder `bin` ke System PATH.*
+# Konkurensi & Worker Pipeline
+DOWNLOAD_WORKERS="2"
+UPLOAD_WORKERS="2"
+MAX_QUEUE_SIZE="5"
 
-Verifikasi instalasi FFmpeg dengan perintah:
-```bash
-ffmpeg -version
+# Timeout Jaringan & Polling Telegram
+BOT_API_TIMEOUT="60"
+POLLING_TIMEOUT="30"
+LONG_POLLING_TIMEOUT="30"
+
+# Batas Percobaan Ulang (Retry)
+MAX_RETRIES="3"
+LOG_LEVEL="INFO"
 ```
 
 ---
 
-### 2. Pasang Dependensi Python
+## 🚀 Panduan Menjalankan
 
-Pasang dependensi sesuai `requirements.txt`:
+### 1. Pasang Dependensi
 ```bash
 pip install -r requirements.txt
 ```
 
-Atau perbarui ke versi terbaru langsung dari PyPI:
-```bash
-pip install -U pyTelegramBotAPI yt-dlp ytmusicapi python-dotenv
-```
+Pastikan **FFmpeg** sudah terpasang di sistem (`ffmpeg -version`).
 
----
-
-### 3. Konfigurasi Token Bot (`.env`)
-
-Salin file `.env.example` menjadi `.env`:
-```bash
-cp .env.example .env
-```
-
-Buka file `.env` dan masukkan token bot Telegram Anda:
-```env
-TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-AUDIO_BITRATE="192"
-MAX_RETRIES="2"
-LOG_LEVEL="INFO"
-```
-
-> ⚠️ **Catatan Keamanan:** Jangan pernah mempublikasikan file `.env` atau token bot ke GitHub/repositori publik.
-
----
-
-## 🎮 Cara Menjalankan Bot
-
-Jalankan program utama:
+### 2. Jalankan Bot
 ```bash
 python3 app.py
 ```
 
-Jika berhasil, Anda akan melihat log:
-```text
-[INFO] [MusicBot] 🤖 Bot Telegram Musik Artis Aktif...
-[INFO] [MusicBot] Bitrate MP3: 192 kbps | Max Retries: 2
-[INFO] [MusicBot] Menunggu pesan pengguna...
-```
-
----
-
-## 🧪 Menjalankan Pengujian Otomatis
-
-Untuk memastikan seluruh fungsi, penanganan error, pembersihan file, dan pembatalan berjalan dengan benar:
+### 3. Jalankan Pengujian Runtime
 ```bash
 python3 test_bot.py
 ```
 
-Semua 12 unit test akan dieksekusi menggunakan modul mock tanpa memerlukan token bot Telegram aktif.
-
 ---
 
-## 📱 Panduan Penggunaan di Telegram
+## 📱 Contoh Interaksi Telegram
 
-1. Buka chat dengan bot Anda di Telegram dan ketik `/start`.
-2. Ketik **nama artis** yang ingin diunduh (misalnya: `Noah`, `Peterpan`, atau `Sheila On 7`).
-3. Bot akan menyapu YouTube Music dan menampilkan ringkasan katalog yang ditemukan:
-   - Jumlah lagu di playlist utama.
-   - Jumlah album rilis yang diproses.
-   - Jumlah singles & EP yang diproses.
-   - Total lagu unik yang siap diunduh.
-4. Klik tombol **`✅ Ya, Download`** untuk memulai proses pengunduhan.
-5. Bot akan mengirimkan lagu satu per satu langsung ke chat Telegram Anda lengkap dengan nama penyanyi dan judul lagu.
-6. Untuk menghentikan proses kapan saja, klik tombol keyboard **`❌ Batalkan`**.
-
----
-
-## 🛡️ Catatan Teknis & Batasan
-
-- **Batas Ukuran File Telegram:** Bot API memiliki batas upload file maksimal 50 MB. Lagu/audio yang durasinya sangat panjang (seperti rekaman konser penuh 3 jam) akan dilewati secara aman dan dicatat di laporan akhir.
-- **Geoblocking:** Beberapa konten YouTube Music mungkin dibatasi secara regional oleh pemilik hak cipta. Lagu yang dibatasi tidak akan merusak antrean dan dapat dicoba lagi melalui tombol *Retry*.
+1. Kirim `/start` ke bot di Telegram.
+2. Ketik nama artis pertama: `Noah`.
+3. Klik tombol `✅ Ya, Download (166 Lagu)`.
+4. Saat unduhan Noah masih berjalan, ketik nama artis kedua: `Peterpan`.
+5. Klik tombol konfirmasi untuk Peterpan: Bot akan memberi tahu:
+   `⏳ Artis Dimasukkan ke Antrean (Posisi #2): Peterpan`
+6. Tekan tombol `📋 Status Antrean` kapan saja untuk melihat status aktif dan antrean menunggu.
