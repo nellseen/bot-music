@@ -54,17 +54,113 @@ import yt_dlp
 from ytmusicapi import YTMusic
 from ytmusicapi.navigation import nav
 
-# ==============================================================================
-# 1. KONFIGURASI DAN LOGGING
-# ==============================================================================
+try:
+    import colorama
+    colorama.init(autoreset=True)
+    COLORAMA_AVAILABLE = True
+except ImportError:
+    COLORAMA_AVAILABLE = False
+
+# Formatter Logging Berwarna (ANSI Color Formatter)
+class ColoredFormatter(logging.Formatter):
+    """Formatter logging kustom dengan ANSI colors untuk terminal yang indah, jelas, dan mudah dibaca."""
+
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+
+    BLACK = "\033[30m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+
+    BRIGHT_BLACK = "\033[90m"
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_MAGENTA = "\033[95m"
+    BRIGHT_CYAN = "\033[96m"
+    BRIGHT_WHITE = "\033[1;97m"
+
+    BG_RED = "\033[41m"
+    BG_GREEN = "\033[42m"
+    BG_YELLOW = "\033[43m"
+    BG_BLUE = "\033[44m"
+    BG_MAGENTA = "\033[45m"
+
+    LEVEL_BADGES = {
+        logging.DEBUG: f"\033[36m\033[1m[DEBUG  ]\033[0m",
+        logging.INFO: f"\033[92m\033[1m[INFO   ]\033[0m",
+        logging.WARNING: f"\033[93m\033[1m[WARNING]\033[0m",
+        logging.ERROR: f"\033[91m\033[1m[ERROR  ]\033[0m",
+        logging.CRITICAL: f"\033[41m\033[97m\033[1m[CRITICAL]\033[0m",
+    }
+
+    TAG_COLORS = {
+        "[CHANNEL]": f"\033[95m\033[1m[CHANNEL]\033[0m",
+        "[CH]": f"\033[95m\033[1m[CH]\033[0m",
+        "[MODE CH]": f"\033[95m\033[1m[MODE CH]\033[0m",
+        "[ARSIP]": f"\033[95m\033[1m[ARSIP]\033[0m",
+        "[TERKIRIM KE CH]": f"\033[92m\033[1m[TERKIRIM KE CH]\033[0m",
+        "[CACHE HIT]": f"\033[92m\033[1m[CACHE HIT]\033[0m",
+        "[CACHE]": f"\033[92m\033[1m[CACHE]\033[0m",
+        "[DOWNLOAD]": f"\033[96m\033[1m[DOWNLOAD]\033[0m",
+        "[YTDLP]": f"\033[96m\033[1m[YTDLP]\033[0m",
+        "[FFMPEG]": f"\033[93m\033[1m[FFMPEG]\033[0m",
+        "[CONVERT]": f"\033[93m\033[1m[CONVERT]\033[0m",
+        "[SEARCH]": f"\033[94m\033[1m[SEARCH]\033[0m",
+        "[YTMUSIC]": f"\033[94m\033[1m[YTMUSIC]\033[0m",
+        "[QUEUE]": f"\033[93m\033[1m[QUEUE]\033[0m",
+        "[JOB]": f"\033[93m\033[1m[JOB]\033[0m",
+        "[SUCCESS]": f"\033[92m\033[1m[SUCCESS]\033[0m",
+        "[BERHASIL]": f"\033[92m\033[1m[BERHASIL]\033[0m",
+        "[GAGAL]": f"\033[91m\033[1m[GAGAL]\033[0m",
+        "[AUTO-RESUME]": f"\033[96m\033[1m[AUTO-RESUME]\033[0m",
+        "[TELEGRAM]": f"\033[96m\033[1m[TELEGRAM]\033[0m",
+        "[BOT]": f"\033[96m\033[1m[BOT]\033[0m",
+        "[STARTUP]": f"\033[92m\033[1m[STARTUP]\033[0m",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        badge = self.LEVEL_BADGES.get(record.levelno, f"{self.BOLD}[{record.levelname:<7}]{self.RESET}")
+        time_str = f"{self.BRIGHT_BLACK}{self.formatTime(record, '%H:%M:%S')}{self.RESET}"
+        name_str = f"{self.CYAN}[{record.name}]{self.RESET}"
+        msg = record.getMessage()
+
+        # Highlight tag khusus jika ada
+        for tag, colored_tag in self.TAG_COLORS.items():
+            if tag in msg:
+                msg = msg.replace(tag, colored_tag)
+
+        # Highlight kutipan nama lagu/artis '...' dengan warna putih terang
+        msg = re.sub(r"\'([^\']+)\'", f"{self.BRIGHT_WHITE}'\\1'{self.RESET}", msg)
+
+        if record.levelno >= logging.ERROR:
+            msg_str = f"{self.BRIGHT_RED}{msg}{self.RESET}"
+        elif record.levelno == logging.WARNING:
+            msg_str = f"{self.BRIGHT_YELLOW}{msg}{self.RESET}"
+        else:
+            msg_str = msg
+
+        formatted = f"{time_str} {badge} {name_str} {msg_str}"
+        if record.exc_info:
+            exc_text = self.formatException(record.exc_info)
+            formatted += f"\n{self.BRIGHT_RED}{exc_text}{self.RESET}"
+        return formatted
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 logger = logging.getLogger("MusicBot")
+logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+logger.handlers.clear()
+_console_handler = logging.StreamHandler(sys.stdout)
+_console_handler.setFormatter(ColoredFormatter())
+logger.addHandler(_console_handler)
+logger.propagate = False
 
 # Token Telegram (mendukung BOT_TOKEN atau TELEGRAM_BOT_TOKEN)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip() or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -81,13 +177,19 @@ if not BOT_TOKEN:
         print("=" * 70 + "\n", file=sys.stderr)
         sys.exit(1)
 
-# Channel Pengarsipan Wajib
-RAW_ARCHIVE_CHANNEL_ID = os.getenv("ARCHIVE_CHANNEL_ID", "").strip()
+# Channel Pengarsipan & Pengiriman Wajib
+# Mendukung ARCHIVE_CHANNEL_ID, CHANNEL_ID, CH_ID, atau TELEGRAM_CHANNEL_ID
+RAW_ARCHIVE_CHANNEL_ID = (
+    os.getenv("ARCHIVE_CHANNEL_ID", "").strip()
+    or os.getenv("CHANNEL_ID", "").strip()
+    or os.getenv("CH_ID", "").strip()
+    or os.getenv("TELEGRAM_CHANNEL_ID", "").strip()
+)
 
 def validate_channel_id(ch_str: str) -> Tuple[Optional[Any], Optional[str]]:
-    """Memvalidasi konfigurasi ARCHIVE_CHANNEL_ID."""
+    """Memvalidasi konfigurasi ARCHIVE_CHANNEL_ID / CHANNEL_ID."""
     if not ch_str:
-        return None, "ARCHIVE_CHANNEL_ID belum diatur di .env."
+        return None, "ARCHIVE_CHANNEL_ID / CHANNEL_ID belum diatur di .env."
     if ch_str in ["-00", "00", "0", "-0"]:
         return None, (
             "ARCHIVE_CHANNEL_ID bernilai placeholder '-00'. "
@@ -105,6 +207,10 @@ def validate_channel_id(ch_str: str) -> Tuple[Optional[Any], Optional[str]]:
 ARCHIVE_CHANNEL_TARGET, ARCHIVE_CHANNEL_WARNING = validate_channel_id(RAW_ARCHIVE_CHANNEL_ID)
 if ARCHIVE_CHANNEL_WARNING:
     logger.warning("PERINGATAN ARSIP: %s", ARCHIVE_CHANNEL_WARNING)
+
+# Mode Pengiriman Audio (Sesuai Permintaan Pengguna: "lagu cukup di kirim ke ch gausah ke bot"):
+# Default: False (Lagu dikirim HANYA ke channel telegram, bot pribadi hanya menerima notifikasi progres & laporan).
+SEND_AUDIO_TO_USER = os.getenv("SEND_AUDIO_TO_USER", "false").strip().lower() in ("true", "1", "yes")
 
 # Kualitas dan Format Audio
 AUDIO_QUALITY = os.getenv("AUDIO_QUALITY", "best").strip().lower()
@@ -888,23 +994,52 @@ def execute_high_throughput_pipeline(job: DownloadJob) -> None:
 
         if cached and cached.get("file_id"):
             # Cache HIT: Kirim langsung via file_id
-            try:
-                caption_text = f"🎵 [{idx}/{total}] {track['title']} (⚡ Arsip)"
-                bot.send_audio(
-                    chat_id=chat_id,
-                    audio=cached["file_id"],
-                    title=track["title"],
-                    performer=track.get("artist") or artist_name,
-                    caption=caption_text,
-                    timeout=30
-                )
+            file_id = cached["file_id"]
+            caption_text = f"🎵 [{idx}/{total}] {track['title']} (⚡ Arsip)"
+            delivered = False
+
+            # 1. Kirim ke Channel jika ARCHIVE_CHANNEL_TARGET disetel
+            if ARCHIVE_CHANNEL_TARGET:
+                try:
+                    bot.send_audio(
+                        chat_id=ARCHIVE_CHANNEL_TARGET,
+                        audio=file_id,
+                        title=track["title"],
+                        performer=track.get("artist") or artist_name,
+                        caption=caption_text,
+                        timeout=30
+                    )
+                    job.archived_count += 1
+                    delivered = True
+                    logger.info("⚡ [CACHE HIT] [CHANNEL] Mengirim '%s' ke Channel %s", track['title'], ARCHIVE_CHANNEL_TARGET)
+                except Exception as e:
+                    logger.warning("Gagal kirim dari cache ke channel [%s]: %s.", track['title'], e)
+
+            # 2. Kirim ke chat bot pengguna HANYA jika SEND_AUDIO_TO_USER diaktifkan atau belum ada channel
+            if SEND_AUDIO_TO_USER or not ARCHIVE_CHANNEL_TARGET:
+                try:
+                    bot.send_audio(
+                        chat_id=chat_id,
+                        audio=file_id,
+                        title=track["title"],
+                        performer=track.get("artist") or artist_name,
+                        caption=caption_text,
+                        timeout=30
+                    )
+                    delivered = True
+                except Exception as e:
+                    logger.warning("Gagal kirim dari cache ke pengguna [%s]: %s.", track['title'], e)
+            else:
+                logger.info("📢 [MODE CH] Audio '%s' dikirim ke Channel saja (tidak dikirim ke bot).", track['title'])
+
+            if delivered:
                 job.cached_count += 1
                 job.delivered_count += 1
                 update_persistent_job_status(job.job_id, "running", delivered_count=job.delivered_count)
                 update_progress_ui()
                 time.sleep(0.2)
-            except Exception as e:
-                logger.warning("Gagal kirim dari cache [%s]: %s. Akan diunduh ulang.", track['title'], e)
+            else:
+                logger.warning("Lagu cache [%s] gagal dikirim ke tujuan, akan diunduh ulang.", track['title'])
                 uncached_tracks.append((idx, track))
         else:
             uncached_tracks.append((idx, track))
@@ -1079,38 +1214,44 @@ def execute_high_throughput_pipeline(job: DownloadJob) -> None:
                     if file_id:
                         save_cached_track(video_id, track_title, job.artist_name, file_id, archive_msg_id, fsize)
 
-                    # 2. PENGIRIMAN KE PENGGUNA
-                    for attempt in range(1, MAX_RETRIES + 1):
-                        try:
-                            caption_text = f"🎵 [{idx}/{total}] {track_title}"
-                            if file_id:
-                                bot.send_audio(
-                                    chat_id=chat_id,
-                                    audio=file_id,
-                                    title=track_title,
-                                    performer=track.get("artist") or job.artist_name,
-                                    caption=caption_text,
-                                    timeout=60
-                                )
-                            else:
-                                with open(file_path, "rb") as afh:
+                    # 2. PENGIRIMAN KE PENGGUNA (HANYA JIKA SEND_AUDIO_TO_USER ATAU TANPA CHANNEL)
+                    if SEND_AUDIO_TO_USER or not ARCHIVE_CHANNEL_TARGET:
+                        for attempt in range(1, MAX_RETRIES + 1):
+                            try:
+                                caption_text = f"🎵 [{idx}/{total}] {track_title}"
+                                if file_id:
                                     bot.send_audio(
                                         chat_id=chat_id,
-                                        audio=afh,
+                                        audio=file_id,
                                         title=track_title,
                                         performer=track.get("artist") or job.artist_name,
                                         caption=caption_text,
-                                        timeout=90
+                                        timeout=60
                                     )
-                            job.delivered_count += 1
-                            update_persistent_job_status(job.job_id, "running", delivered_count=job.delivered_count)
-                            break
-                        except Exception as user_send_err:
-                            logger.warning("Gagal kirim ke pengguna [%s] (percobaan %d): %s", track_title, attempt, user_send_err)
-                            if attempt == MAX_RETRIES:
-                                job.failed_count += 1
-                                job.failed_tracks.append({"title": track_title, "videoId": video_id, "reason": f"Gagal kirim Telegram: {str(user_send_err)[:50]}"})
-                            time.sleep(1.5 * attempt)
+                                else:
+                                    with open(file_path, "rb") as afh:
+                                        bot.send_audio(
+                                            chat_id=chat_id,
+                                            audio=afh,
+                                            title=track_title,
+                                            performer=track.get("artist") or job.artist_name,
+                                            caption=caption_text,
+                                            timeout=90
+                                        )
+                                job.delivered_count += 1
+                                update_persistent_job_status(job.job_id, "running", delivered_count=job.delivered_count)
+                                break
+                            except Exception as user_send_err:
+                                logger.warning("Gagal kirim ke pengguna [%s] (percobaan %d): %s", track_title, attempt, user_send_err)
+                                if attempt == MAX_RETRIES:
+                                    job.failed_count += 1
+                                    job.failed_tracks.append({"title": track_title, "videoId": video_id, "reason": f"Gagal kirim Telegram: {str(user_send_err)[:50]}"})
+                                time.sleep(1.5 * attempt)
+                    else:
+                        # Sesuai instruksi: "lagu cukup di kirim ke ch gausah ke bot"
+                        job.delivered_count += 1
+                        update_persistent_job_status(job.job_id, "running", delivered_count=job.delivered_count)
+                        logger.info("✅ [TERKIRIM KE CH] [%s] berhasil sampai di Channel %s (tidak dikirim ke bot).", track_title, ARCHIVE_CHANNEL_TARGET)
 
                     update_progress_ui()
 
@@ -1162,18 +1303,22 @@ def execute_high_throughput_pipeline(job: DownloadJob) -> None:
         return
 
     desc = "Single Lagu" if job.job_type == "single" else "Katalog Artis"
+    ch_info = f"📢 Tujuan: <b>{html.escape(str(ARCHIVE_CHANNEL_TARGET))}</b>" if ARCHIVE_CHANNEL_TARGET else "⚠️ Channel: Belum diatur"
     report_lines = [
         f"🎉 <b>{desc} Selesai Diproses!</b>",
         f"Judul/Artis: <b>{html.escape(artist_name)}</b>",
+        ch_info,
         f"⏱️ Waktu pengerjaan: {m}m {s}s\n",
         f"📊 <b>Ringkasan Pengiriman:</b>",
         f"• Total: <b>{total}</b> lagu",
+        f"• 📢 Terkirim ke Channel: <b>{job.archived_count}</b>",
         f"• ⚡ Terkirim dari Cache: <b>{job.cached_count}</b>",
         f"• 📥 Diunduh Baru: <b>{job.downloaded_count}</b>",
-        f"• 🏛️ Tersimpan di Channel Arsip: <b>{job.archived_count}</b>",
         f"• ❌ Gagal: <b>{job.failed_count}</b>",
         f"• ⏭️ Dilewati (>50MB): <b>{job.skipped_count}</b>"
     ]
+    if not SEND_AUDIO_TO_USER:
+        report_lines.append("\n💡 <i>Catatan: Lagu dikirim langsung ke channel agar chat bot tetap bersih dan rapi.</i>")
 
     retry_markup = None
     if job.failed_tracks:
@@ -1705,16 +1850,23 @@ def handle_confirm_inline(call: types.CallbackQuery) -> None:
 
 def main() -> None:
     """Fungsi utama untuk menjalankan bot Telegram dengan toleransi timeout dan anti-bentrok."""
-    logger.info("=" * 65)
-    logger.info("🤖 Bot Telegram Musik Artis & Single Track Aktif...")
-    logger.info("Konfigurasi Audio: format=%s, quality=%s, bitrate=%s", AUDIO_FORMAT, AUDIO_QUALITY, AUDIO_BITRATE)
-    logger.info("Worker Pipeline: Download=%d, Upload=%d, MaxQueue=%d", DOWNLOAD_WORKERS, UPLOAD_WORKERS, MAX_QUEUE_SIZE)
-    logger.info("Timeout Jaringan: BotApi=%ds, Polling=%ds", BOT_API_TIMEOUT, POLLING_TIMEOUT)
+    banner = f"""\033[96m╔═════════════════════════════════════════════════════════════════════════════╗
+║\033[93m\033[1m              🎵 TELEGRAM ARTIST & SINGLE MUSIC DOWNLOADER BOT 🎵            \033[0m\033[96m║
+║\033[92m\033[1m      📢 MODE PENGIRIMAN: LANGSUNG KE CHANNEL (CH) | LOGS BERWARNA AKTIF      \033[0m\033[96m║
+╚═════════════════════════════════════════════════════════════════════════════╝\033[0m"""
+    print(banner, flush=True)
+
+    logger.info("=" * 68)
+    logger.info("🤖 [STARTUP] Bot Telegram Musik Artis & Single Track Aktif...")
+    logger.info("🎵 [STARTUP] Konfigurasi Audio: format=%s, quality=%s, bitrate=%s", AUDIO_FORMAT, AUDIO_QUALITY, AUDIO_BITRATE or "asli")
+    logger.info("⚡ [STARTUP] [QUEUE] Worker: %d Download | %d Upload (Max Buffer: %d)", DOWNLOAD_WORKERS, UPLOAD_WORKERS, MAX_QUEUE_SIZE)
+    logger.info("🌐 [STARTUP] [TELEGRAM] Timeout Jaringan: BotApi=%ds, Polling=%ds", BOT_API_TIMEOUT, POLLING_TIMEOUT)
     if ARCHIVE_CHANNEL_TARGET:
-        logger.info("Channel Pengarsipan Wajib: %s", ARCHIVE_CHANNEL_TARGET)
+        logger.info("📢 [STARTUP] [CHANNEL] Channel Tujuan: %s", ARCHIVE_CHANNEL_TARGET)
     else:
-        logger.warning("Channel Pengarsipan Wajib: TIDAK AKTIF (%s)", ARCHIVE_CHANNEL_WARNING)
-    logger.info("=" * 65)
+        logger.warning("⚠️ [STARTUP] [CHANNEL] Channel Tujuan: TIDAK AKTIF (%s)", ARCHIVE_CHANNEL_WARNING)
+    logger.info("📨 [STARTUP] [MODE CH] Pengiriman ke Bot Chat: %s", "AKTIF (Ganda)" if SEND_AUDIO_TO_USER else "NONAKTIF (Cukup di Channel Saja)")
+    logger.info("=" * 68)
 
     # Bersihkan webhook lama
     try:

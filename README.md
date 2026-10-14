@@ -6,43 +6,60 @@ Bot Telegram Python tingkat lanjut yang dirancang untuk mengunduh lagu individua
 
 ## ✨ Fitur Unggulan
 
-1. 🔍 **Pencarian Single Lagu Langsung (`/song` & `/search`):**
+1. 📢 **Mode Pengiriman: Cukup ke Channel (CH), Tanpa Spam Chat Bot:**
+   - Sesuai preferensi, file lagu yang diunduh maupun dari cache **hanya dikirim langsung ke Channel Telegram (`ARCHIVE_CHANNEL_ID` / `CHANNEL_ID`)**.
+   - Chat bot pribadi pengguna hanya menerima pesan status, indikator progres unduhan, dan laporan ringkasan selesai.
+   - Ruang obrolan pribadi tetap rapi, bersih, dan bebas dari banjir file audio.
+   - Opsi pengiriman ganda (channel + bot chat) tetap dapat diaktifkan jika diinginkan via `SEND_AUDIO_TO_USER=true`.
+
+2. 🎨 **Terminal Logs Berwarna (Colorama + ANSI) yang Mudah Dilihat:**
+   - Konsol terminal dilengkapi badge warna berdaya lihat tinggi (`[INFO]` hijau, `[WARNING]` kuning, `[ERROR]` merah, `[CRITICAL]` merah tebal).
+   - Penyorotan tag spesifik dengan warna berbeda:
+     - 📢 `[CHANNEL]` / `[CH]` / `[MODE CH]` (Magenta/Pink terang)
+     - ⚡ `[CACHE HIT]` / `[CACHE]` (Hijau neon)
+     - 📥 `[DOWNLOAD]` / `[YTDLP]` (Biru langit)
+     - 🔄 `[QUEUE]` / `[JOB]` (Kuning terang)
+     - 🔍 `[SEARCH]` / `[YTMUSIC]` (Biru laut)
+     - 🎵 Judul lagu dan nama artis dalam kutipan otomatis disorot putih terang.
+   - Dilengkapi **Startup ASCII Banner** berwarna saat bot menyala.
+
+3. 🔍 **Pencarian Single Lagu Langsung (`/song` & `/search`):**
    - Cari lagu spesifik berdasarkan judul atau judul + nama artis.
    - Contoh: `/song Separuh Aku` atau `/song Separuh Aku Noah` atau `/search Hampa Ari Lasso`.
    - Menampilkan 5–8 hasil relevan lengkap dengan judul, artis, album, dan durasi.
    - Pilihan lagu menggunakan tombol inline keyboard (`1️⃣`, `2️⃣`, `3️⃣`, dst.) dengan validasi keamanan sesi privat.
 
-2. ⚡ **Producer-Consumer Pipeline (Download & Upload Konkuren):**
+4. ⚡ **Producer-Consumer Pipeline (Download & Upload Konkuren):**
    - Download worker dan upload worker berjalan secara simultan menggunakan buffer antrean berbatas (`MAX_QUEUE_SIZE`).
    - Tidak perlu menunggu satu lagu selesai diunggah sebelum mulai mengunduh lagu berikutnya.
 
-3. 🏛️ **Pengarsipan Wajib Channel (`ARCHIVE_CHANNEL_ID`):**
+5. 🏛️ **Pengarsipan & Pengiriman Channel Wajib (`ARCHIVE_CHANNEL_ID`):**
    - Setiap lagu wajib berhasil dikirim ke channel arsip Telegram terlebih dahulu.
-   - Telegram `file_id` disimpan ke database SQLite, lalu diteruskan ke pengguna secara instan tanpa mengunggah ulang file fisik.
+   - Telegram `file_id` disimpan ke database SQLite untuk cache instan.
    - Validasi ketat format channel (menolak placeholder `-00`).
 
-4. 💾 **Smart Cache Persisten SQLite (`music_cache.db`):**
+6. 💾 **Smart Cache Persisten SQLite (`music_cache.db`):**
    - Lagu yang sudah pernah diarsipkan akan dikirim ulang secara instan (**0 detik latency**) menggunakan `file_id` jika diminta kembali.
 
-5. 🔄 **Auto-Resume Setelah Restart / Crash:**
+7. 🔄 **Auto-Resume Setelah Restart / Crash:**
    - Semua job disimpan ke tabel `persistent_jobs` di database SQLite.
    - Jika bot mati atau server dimulai ulang saat proses unduh/upload sedang berjalan, bot otomatis melanjutkan pekerjaan tertunda saat menyala kembali.
 
-6. 📋 **Multi-Job Unified Queue:**
+8. 📋 **Multi-Job Unified Queue:**
    - Antrean terpadu untuk katalog artis dan single lagu.
    - Pengguna dapat menambahkan lagu/artis baru saat unduhan lain sedang berjalan tanpa saling menimpa atau mereset antrean.
 
-7. 🩺 **Monitoring & Perintah Admin:**
+9. 🩺 **Monitoring & Perintah Admin:**
    - `/queue` — Menampilkan daftar antrean dan pekerjaan aktif.
    - `/status` — Memeriksa status pekerjaan pengguna.
    - `/stats` — Statistik total lagu di cache, pekerjaan selesai, dan uptime bot.
    - `/health` — Diagnostik kesehatan database, worker threads, dan status channel arsip (dibatasi `ADMIN_USER_IDS`).
    - `/cancel` — Membatalkan pekerjaan aktif atau antrean tertentu.
 
-8. 🎛️ **Konfigurasi Audio Fleksibel via ENV:**
-   - `AUDIO_QUALITY=best`: Stream audio murni terbaik (`bestaudio/best`).
-   - `AUDIO_FORMAT=mp3`: Format audio target.
-   - `AUDIO_BITRATE=0`: Menjaga kualitas sumber asli tanpa re-encode lossy yang sia-sia.
+10. 🎛️ **Konfigurasi Audio Fleksibel via ENV:**
+    - `AUDIO_QUALITY=best`: Stream audio murni terbaik (`bestaudio/best`).
+    - `AUDIO_FORMAT=mp3`: Format audio target.
+    - `AUDIO_BITRATE=0`: Menjaga kualitas sumber asli tanpa re-encode lossy yang sia-sia.
 
 ---
 

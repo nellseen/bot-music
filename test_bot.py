@@ -210,7 +210,7 @@ class Test14PointTelegramMusicBot(unittest.TestCase):
             self.assertEqual(manager.pending_queue[1].job_id, "j_3")
 
     def test_09_mandatory_channel_archive(self):
-        """9. Pengarsipan wajib: lagu dikirim ke ARCHIVE_CHANNEL_ID dahulu sebelum dikirim ke user."""
+        """9. Pengarsipan wajib: lagu dikirim ke ARCHIVE_CHANNEL_ID (channel only)."""
         job = DownloadJob(
             job_id="job_arc_09",
             chat_id=301,
@@ -224,7 +224,7 @@ class Test14PointTelegramMusicBot(unittest.TestCase):
         mock_arc_msg = MagicMock()
         mock_arc_msg.message_id = 777
         mock_arc_msg.audio.file_id = "TG_FILE_ID_09"
-        mock_bot.send_audio.side_effect = [mock_arc_msg, MagicMock()]
+        mock_bot.send_audio.return_value = mock_arc_msg
 
         with patch("yt_dlp.YoutubeDL") as MockYDL:
             instance = MockYDL.return_value.__enter__.return_value
@@ -236,17 +236,51 @@ class Test14PointTelegramMusicBot(unittest.TestCase):
 
             with patch("app.bot", mock_bot):
                 with patch("app.ARCHIVE_CHANNEL_TARGET", -1009876543210):
-                    execute_high_throughput_pipeline(job)
+                    with patch("app.SEND_AUDIO_TO_USER", False):
+                        execute_high_throughput_pipeline(job)
+
+        # Sesuai "lagu cukup di kirim ke ch gausah ke bot", send_audio hanya 1x ke channel
+        self.assertEqual(mock_bot.send_audio.call_count, 1)
+        self.assertEqual(mock_bot.send_audio.call_args.kwargs["chat_id"], -1009876543210)
+        self.assertEqual(job.archived_count, 1)
+        self.assertEqual(job.delivered_count, 1)
+
+    def test_09b_optional_user_delivery(self):
+        """9b. Pengiriman ganda ke channel DAN user saat SEND_AUDIO_TO_USER=True."""
+        job = DownloadJob(
+            job_id="job_arc_09b",
+            chat_id=302,
+            user_id=302,
+            artist_name="Artis Dual",
+            query="",
+            tracks=[{"title": "Lagu Dual", "videoId": "VID_ARC_09B"}]
+        )
+
+        mock_bot = MagicMock()
+        mock_arc_msg = MagicMock()
+        mock_arc_msg.message_id = 778
+        mock_arc_msg.audio.file_id = "TG_FILE_ID_09B"
+        mock_bot.send_audio.side_effect = [mock_arc_msg, MagicMock()]
+
+        with patch("yt_dlp.YoutubeDL") as MockYDL:
+            instance = MockYDL.return_value.__enter__.return_value
+            tmp_mp3 = os.path.join(tempfile.gettempdir(), "VID_ARC_09B.mp3")
+            with open(tmp_mp3, "wb") as f:
+                f.write(b"AUDIO")
+            instance.extract_info.return_value = {"id": "VID_ARC_09B", "ext": "mp3"}
+            instance.prepare_filename.return_value = tmp_mp3
+
+            with patch("app.bot", mock_bot):
+                with patch("app.ARCHIVE_CHANNEL_TARGET", -1009876543210):
+                    with patch("app.SEND_AUDIO_TO_USER", True):
+                        execute_high_throughput_pipeline(job)
 
         self.assertEqual(mock_bot.send_audio.call_count, 2)
-        # Panggilan 1 ke channel
         self.assertEqual(mock_bot.send_audio.call_args_list[0].kwargs["chat_id"], -1009876543210)
-        # Panggilan 2 ke user via file_id
-        self.assertEqual(mock_bot.send_audio.call_args_list[1].kwargs["audio"], "TG_FILE_ID_09")
-        self.assertEqual(job.archived_count, 1)
+        self.assertEqual(mock_bot.send_audio.call_args_list[1].kwargs["chat_id"], 302)
 
     def test_10_cache_instant_resend(self):
-        """10. Pengiriman ulang instan dari cache SQLite (file_id) tanpa download ulang."""
+        """10. Pengiriman ulang instan dari cache SQLite (file_id) ke channel tanpa download ulang."""
         save_cached_track("VID_FAST_10", "Lagu Instan", "Artis Cepat", "FILE_ID_INSTAN", 123, 500000)
 
         job = DownloadJob(
@@ -261,12 +295,16 @@ class Test14PointTelegramMusicBot(unittest.TestCase):
         mock_bot = MagicMock()
         with patch("yt_dlp.YoutubeDL") as MockYDL:
             with patch("app.bot", mock_bot):
-                execute_high_throughput_pipeline(job)
+                with patch("app.ARCHIVE_CHANNEL_TARGET", -1009876543210):
+                    with patch("app.SEND_AUDIO_TO_USER", False):
+                        execute_high_throughput_pipeline(job)
             MockYDL.assert_not_called()  # Tidak ada unduh ulang!
 
         mock_bot.send_audio.assert_called_once()
+        self.assertEqual(mock_bot.send_audio.call_args.kwargs["chat_id"], -1009876543210)
         self.assertEqual(mock_bot.send_audio.call_args.kwargs["audio"], "FILE_ID_INSTAN")
         self.assertEqual(job.cached_count, 1)
+        self.assertEqual(job.archived_count, 1)
 
     def test_11_retry_mechanism(self):
         """11. Sistem Retry: percobaan ulang saat download atau upload mengalami error sementara."""
@@ -352,6 +390,46 @@ class Test14PointTelegramMusicBot(unittest.TestCase):
         self.assertEqual(telebot.apihelper.CONNECT_TIMEOUT, app.BOT_API_TIMEOUT)
         self.assertEqual(telebot.apihelper.READ_TIMEOUT, app.BOT_API_TIMEOUT)
         self.assertEqual(telebot.apihelper.LONG_POLLING_TIMEOUT, app.LONG_POLLING_TIMEOUT)
+
+    def test_15_colored_logging_formatter(self):
+        """15. Verifikasi formatter logging berwarna ANSI dan penyorotan tag."""
+        import logging
+        formatter = app.ColoredFormatter()
+        
+        # Test INFO record dengan tag [CHANNEL] dan kutipan lagu
+        record_info = logging.LogRecord(
+            name="MusicBot",
+            level=logging.INFO,
+            pathname="app.py",
+            lineno=100,
+            msg="📢 [CHANNEL] Mengirim 'Separuh Aku' ke channel",
+            args=(),
+            exc_info=None
+        )
+        formatted_info = formatter.format(record_info)
+        self.assertIn("\033[92m", formatted_info)  # ANSI Info green badge
+        self.assertIn("[INFO   ]", formatted_info)
+        self.assertIn("[CHANNEL]", formatted_info)
+        self.assertIn("Separuh Aku", formatted_info)
+
+        # Test ERROR record
+        record_err = logging.LogRecord(
+            name="MusicBot",
+            level=logging.ERROR,
+            pathname="app.py",
+            lineno=105,
+            msg="❌ [GAGAL] Unduhan terputus",
+            args=(),
+            exc_info=None
+        )
+        formatted_err = formatter.format(record_err)
+        self.assertIn("\033[91m", formatted_err)  # ANSI Error red badge
+        self.assertIn("[ERROR  ]", formatted_err)
+
+    def test_16_send_audio_to_user_mode(self):
+        """16. Verifikasi nilai default SEND_AUDIO_TO_USER adalah False (cukup ke CH)."""
+        # Default harus False sesuai permintaan: "lagu cukup di kirim ke ch gausah ke bot"
+        self.assertFalse(app.SEND_AUDIO_TO_USER)
 
 
 if __name__ == "__main__":
